@@ -1,11 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Adres URL Twojej wdrożonej aplikacji internetowej Google Apps Script
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzu0mPeOZvjxnTJmvELkRdYMqFjxnhJHUdHbYJHojO06m9im_eoqQOQ3UzKtdgK8VPq6Q/exec';
-
-    const dateTimeText = document.getElementById('dateTimeText');
     const navbarContainer = document.getElementById('navbar-container');
+    const dateTimeText = document.getElementById('dateTimeText');
 
-    // Funkcja aktualizująca datę i czas w nagłówku
+    // Function to update the date and time in the header
     const updateDateTimeHeader = () => {
         if (!dateTimeText) return;
         const now = new Date();
@@ -13,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dateTimeText.textContent = now.toLocaleDateString('pl-PL', options);
     };
 
-    // --- NOWOŚĆ: Dynamiczna nawigacja ---
+    // --- Dynamic Navigation ---
     const generateNavbar = () => {
         if (!navbarContainer) return;
 
@@ -42,12 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
 
-    // --- NOWOŚĆ: System powiadomień "Toast" ---
+    // --- "Toast" Notification System ---
     window.showToast = (message, duration = 3000) => {
-        const toastContainer = document.getElementById('toast-container');
+        let toastContainer = document.getElementById('toast-container');
         if (!toastContainer) {
-            console.error('Toast container not found!');
-            return;
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            document.body.appendChild(toastContainer);
         }
 
         const toast = document.createElement('div');
@@ -59,13 +57,15 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => {
-                toastContainer.removeChild(toast);
-            }, 500); // Czas na animację zniknięcia
+                if (toast.parentNode === toastContainer) {
+                   toastContainer.removeChild(toast);
+                }
+            }, 500);
         }, duration);
     };
 
 
-    // Inicjalizacja
+    // Initialization
     generateNavbar();
     setInterval(updateDateTimeHeader, 1000);
     updateDateTimeHeader();
