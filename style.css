@@ -10,37 +10,7 @@ body {
     margin: 0 20px 20px 20px;
 }
 
-/* --- Nawigacja --- */
-.navbar {
-    background-color: #333;
-    overflow: hidden;
-}
-
-.navbar ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    justify-content: center;
-}
-
-.navbar a {
-    display: block;
-    color: white;
-    text-align: center;
-    padding: 14px 20px;
-    text-decoration: none;
-    transition: background-color 0.3s;
-}
-
-.navbar a:hover {
-    background-color: #555;
-}
-
-.navbar a.active {
-    background-color: #4CAF50;
-}
-
+/* --- USUNIĘTO: Stara nawigacja .navbar --- */
 
 /* --- Nagłówek Aplikacji --- */
 .app-header {
@@ -80,6 +50,57 @@ body {
     align-items: center;
     gap: 15px;
 }
+
+/* --- NOWE: Hamburger Menu --- */
+.hamburger-menu {
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 50%;
+    transition: background-color 0.3s;
+    font-size: 1.4em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.hamburger-menu:hover, .hamburger-menu.active {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+.nav-panel {
+    position: fixed;
+    top: 0;
+    right: -280px; /* Start off-screen */
+    width: 250px;
+    height: 100%;
+    background-color: #333;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.5);
+    transition: right 0.3s ease-in-out;
+    z-index: 9999;
+    padding-top: 60px;
+}
+.nav-panel.visible {
+    right: 0; /* Slide in */
+}
+.nav-panel ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.nav-panel a {
+    display: block;
+    padding: 15px 25px;
+    color: white;
+    text-decoration: none;
+    font-size: 1.2em;
+    border-bottom: 1px solid #444;
+    transition: background-color 0.3s;
+}
+.nav-panel a:hover {
+    background-color: #555;
+}
+.nav-panel a.active {
+    background-color: #4CAF50;
+}
+
 
 /* --- Przyciski --- */
 .undo-button {
@@ -444,7 +465,7 @@ td.current-time-highlight {
     border-radius: 2px;
 }
 
-/* --- NOWE: Menu Kontekstowe --- */
+/* --- Menu Kontekstowe --- */
 .context-menu {
     position: absolute;
     display: none;
@@ -459,19 +480,16 @@ td.current-time-highlight {
     transform: scale(0.95);
     min-width: 200px;
 }
-
 .context-menu.visible {
     display: block;
     opacity: 1;
     transform: scale(1);
 }
-
 .context-menu ul {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-
 .context-menu li {
     display: flex;
     align-items: center;
@@ -481,11 +499,9 @@ td.current-time-highlight {
     color: #333;
     font-size: 0.95em;
 }
-
 .context-menu li:hover {
     background-color: #f2f2f2;
 }
-
 .context-menu li i {
     margin-right: 12px;
     width: 1.2em;
@@ -503,7 +519,6 @@ td.current-time-highlight {
     flex-direction: column;
     align-items: flex-end;
 }
-
 .toast {
     background-color: #333;
     color: #fff;
@@ -515,7 +530,6 @@ td.current-time-highlight {
     transform: translateX(100%);
     transition: opacity 0.5s, transform 0.5s;
 }
-
 .toast.show {
     opacity: 1;
     transform: translateX(0);

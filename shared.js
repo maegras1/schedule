@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const navbarContainer = document.getElementById('navbar-container');
     const dateTimeText = document.getElementById('dateTimeText');
+    const appHeader = document.getElementById('appHeader');
 
     // Function to update the date and time in the header
     const updateDateTimeHeader = () => {
@@ -10,34 +10,65 @@ document.addEventListener('DOMContentLoaded', () => {
         dateTimeText.textContent = now.toLocaleDateString('pl-PL', options);
     };
 
-    // --- Dynamic Navigation ---
-    const generateNavbar = () => {
-        if (!navbarContainer) return;
+    // --- NEW: Hamburger Menu in Header ---
+    const generateHamburgerMenu = () => {
+        // Find the right side of the header to inject the menu
+        let headerRightMenu = appHeader.querySelector('.header-right-menu');
+        if (!headerRightMenu) {
+            headerRightMenu = document.createElement('div');
+            headerRightMenu.className = 'header-right-menu';
+            appHeader.appendChild(headerRightMenu);
+        }
 
         const navLinks = [
             { href: 'schedule.html', text: 'Grafik' },
             { href: 'leaves.html', text: 'Urlopy' },
             { href: 'options.html', text: 'Opcje' }
         ];
-
         const currentPage = window.location.pathname.split('/').pop();
 
-        const navHTML = `
-            <nav class="navbar">
-                <ul>
-                    ${navLinks.map(link => `
-                        <li>
-                            <a href="${link.href}" class="${currentPage === link.href ? 'active' : ''}">
-                                ${link.text}
-                            </a>
-                        </li>
-                    `).join('')}
-                </ul>
-            </nav>
-        `;
-        navbarContainer.innerHTML = navHTML;
-    };
+        // Create hamburger icon
+        const hamburger = document.createElement('div');
+        hamburger.className = 'hamburger-menu';
+        hamburger.innerHTML = '<i class="fas fa-bars"></i>';
+        
+        // Create navigation panel that slides from the right
+        const navPanel = document.createElement('div');
+        navPanel.className = 'nav-panel';
+        
+        const ul = document.createElement('ul');
+        navLinks.forEach(link => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.href = link.href;
+            a.textContent = link.text;
+            if (currentPage === link.href) {
+                a.classList.add('active');
+            }
+            li.appendChild(a);
+            ul.appendChild(li);
+        });
+        navPanel.appendChild(ul);
 
+        // Add hamburger icon to the header, and panel to the body
+        headerRightMenu.appendChild(hamburger);
+        document.body.appendChild(navPanel);
+
+        // Event listener to toggle menu visibility
+        hamburger.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent the document click listener from firing immediately
+            navPanel.classList.toggle('visible');
+            hamburger.classList.toggle('active');
+        });
+        
+        // Event listener to close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (navPanel.classList.contains('visible') && !navPanel.contains(e.target) && !hamburger.contains(e.target)) {
+                navPanel.classList.remove('visible');
+                hamburger.classList.remove('active');
+            }
+        });
+    };
 
     // --- "Toast" Notification System ---
     window.showToast = (message, duration = 3000) => {
@@ -51,7 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const toast = document.createElement('div');
         toast.className = 'toast show';
         toast.textContent = message;
-
         toastContainer.appendChild(toast);
 
         setTimeout(() => {
@@ -64,9 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, duration);
     };
 
-
     // Initialization
-    generateNavbar();
+    generateHamburgerMenu();
     setInterval(updateDateTimeHeader, 1000);
     updateDateTimeHeader();
 });
