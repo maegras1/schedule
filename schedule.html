@@ -1,61 +1,53 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html>
 <head>
+    <title>Grafik pracy</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grafik - Kalinowa</title>
-    <link rel="icon" href="logo.png" type="image/png">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" type="text/css" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loader"></div>
-        <p>Wczytywanie...</p>
+        <p>Ładowanie danych...</p>
     </div>
 
-    <div id="toast-container"></div>
-
-    <div id="appHeader" class="app-header">
-        <div class="banner-left-content">
-            <img src="logo.png" alt="Logo Kalinowa" class="banner-logo">
-            <span class="banner-title">Grafik Kalinowa</span>
-        </div>
-        <div id="dateTimeText" class="date-time-text"></div>
-        <div class="header-right-menu">
-            <div class="search-container">
-                <i class="fas fa-search search-icon"></i>
-                <input type="text" id="searchInput" class="search-input" placeholder="Szukaj...">
-                <button id="clearSearchButton" class="clear-search-btn" style="display: none;"><i class="fas fa-times"></i></button>
-            </div>
-            <button id="undoButton" class="undo-button" title="Cofnij (Ctrl+Z)" disabled><i class="fas fa-undo"></i></button>
-        </div>
-    </div>
-
+    <div id="appHeader"></div>
     <div class="container">
+        <h1>Grafik pracy</h1>
+        <div class="search-container">
+            <span class="search-icon"><i class="fas fa-search"></i></span>
+            <input type="text" id="searchInput" class="search-input" placeholder="Wyszukaj pracownika...">
+            <button class="clear-search-btn" id="clearSearchBtn" style="display: none;">&times;</button>
+        </div>
         <table id="mainScheduleTable">
             <thead>
-                <tr id="tableHeaderRow">
-                    <th>Godzina</th>
+                <tr id="headerRow">
+                    <!-- Nagłówki zostaną wygenerowane przez JavaScript -->
                 </tr>
             </thead>
             <tbody>
+                <!-- Wiersze z danymi zostaną wygenerowane przez JavaScript -->
             </tbody>
         </table>
-
-        <div id="contextMenu" class="context-menu">
-            <ul>
-                <li id="contextSplitCell"><i class="fas fa-users"></i><span>Podziel komórkę</span></li>
-                <li id="contextAddBreak"><i class="fas fa-coffee"></i><span>Dodaj przerwę</span></li>
-                <li id="contextMassage"><i class="fas fa-hand-paper"></i><span>Oznacz jako Masaż</span></li>
-                <li id="contextPnf"><i class="fas fa-brain"></i><span>Oznacz jako PNF</span></li>
-                <li id="contextClear"><i class="fas fa-trash-alt"></i><span>Wyczyść komórkę</span></li>
-                <li id="contextRemoveBreak" style="display: none;"><i class="fas fa-backspace"></i><span>Usuń przerwę</span></li>
-            </ul>
-        </div>
     </div>
 
-<script src="shared.js"></script>
-<script src="schedule.js"></script>
+    <div id="toast-container"></div>
+    
+    <div class="context-menu" id="contextMenu">
+        <ul>
+            <li id="ctx-copy">
+                <i class="fas fa-copy"></i>
+                <span>Kopiuj</span>
+            </li>
+            <li id="ctx-paste">
+                <i class="fas fa-paste"></i>
+                <span>Wklej</span>
+            </li>
+        </ul>
+    </div>
+    
+    <script src="shared.js"></script>
+    <script src="schedule.js"></script>
 </body>
 </html>
