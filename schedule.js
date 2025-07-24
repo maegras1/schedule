@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const tbody = mainTable.querySelector('tbody');
     const contextMenu = document.getElementById('contextMenu');
     const undoButton = document.getElementById('undoButton');
+    const searchInput = document.getElementById('searchInput');
+    const clearSearchButton = document.getElementById('clearSearchButton');
 
     // Context Menu Options
     const contextSplitCell = document.getElementById('contextSplitCell');
@@ -85,7 +87,48 @@ document.addEventListener('DOMContentLoaded', () => {
             matchingCells.forEach(td => td.classList.add('duplicate-highlight'));
         }
     };
-    
+
+    const searchAndHighlight = (searchTerm) => {
+        const allCells = document.querySelectorAll('th.editable-header, td.editable-cell');
+        const regex = searchTerm ? new RegExp(searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi') : null;
+
+        const highlightElement = (element) => {
+            // Najpierw usuń stare podświetlenia
+            element.querySelectorAll('span.search-highlight').forEach(highlight => {
+                const parent = highlight.parentNode;
+                while (highlight.firstChild) {
+                    parent.insertBefore(highlight.firstChild, highlight);
+                }
+                parent.removeChild(highlight);
+                parent.normalize(); // Łączy sąsiednie węzły tekstowe
+            });
+
+            if (!regex) return; // Jeśli nie ma czego szukać, kończymy po czyszczeniu
+
+            // Użyj TreeWalker, aby bezpiecznie znaleźć i zamienić węzły tekstowe
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let currentNode;
+            while (currentNode = walker.nextNode()) {
+                textNodes.push(currentNode);
+            }
+
+            textNodes.forEach(node => {
+                const text = node.nodeValue;
+                const newHtml = text.replace(regex, `<span class="search-highlight">$&</span>`);
+                if (newHtml !== text) {
+                    const newFragment = document.createRange().createContextualFragment(newHtml);
+                    node.parentNode.replaceChild(newFragment, node);
+                }
+            });
+        };
+
+        allCells.forEach(cell => {
+            const elementsToHighlight = cell.classList.contains('split-cell') ? cell.querySelectorAll('div') : [cell];
+            elementsToHighlight.forEach(el => highlightElement(el));
+        });
+    };
+
     const capitalizeFirstLetter = (string) => {
         if (!string) return '';
         return string.charAt(0).toUpperCase() + string.slice(1);
@@ -696,6 +739,20 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             setActiveCell(nextElement);
         }
+    });
+
+    // --- WYSZUKIWARKA ---
+    searchInput.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.trim();
+        searchAndHighlight(searchTerm);
+        clearSearchButton.style.display = searchTerm ? 'block' : 'none';
+    });
+
+    clearSearchButton.addEventListener('click', () => {
+        searchInput.value = '';
+        searchAndHighlight('');
+        clearSearchButton.style.display = 'none';
+        searchInput.focus();
     });
 
 
