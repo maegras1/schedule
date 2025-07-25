@@ -1,5 +1,7 @@
+
 document.addEventListener('DOMContentLoaded', () => {
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxzGIaD4Xb6-eUjBrYDdVFYS0nBEhc_n-HitZ1sgwOg6eGP5XagxuTBwxaPVxKran-mDw/exec';
+    // WAŻNE: Wklej tutaj nowy URL wdrożonej aplikacji Google Apps Script
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxWll_xu1NWXXXint2OkVcriv20NApTkesBGrgqgcVYYWPAoLUDMqszNRzNuDK1I7VaQQ/exec';
 
     const loadingOverlay = document.getElementById('loadingOverlay');
     const mainTable = document.getElementById('mainScheduleTable');
@@ -18,13 +20,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const contextClear = document.getElementById('contextClear');
     const contextRemoveBreak = document.getElementById('contextRemoveBreak');
 
-    let currentCell = null; // The TD cell that the context menu is acting upon
+    let currentCell = null;
     let draggedCell = null;
-    let activeCell = null; // The currently focused element for keyboard nav (TD, TH, or DIV)
-    let previouslyHighlightedTimeCell = null;
-
+    let activeCell = null;
     const undoStack = [];
-    const redoStack = []; // Kept for potential future implementation
+    const redoStack = [];
     const MAX_UNDO_STATES = 20;
 
     const NUMBER_OF_EMPLOYEES = 13;
@@ -34,12 +34,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const CONTENT_CELL_COLOR = '#ffffff';
     const BREAK_TEXT = 'Przerwa';
 
+    // --- Helper Functions ---
     const refreshRowHeight = (cell) => {
         if (!cell) return;
         const parentRow = cell.closest('tr');
-        if (parentRow) {
-            parentRow.style.height = 'auto';
-        }
+        if (parentRow) parentRow.style.height = 'auto';
     };
 
     const refreshAllRowHeights = () => {
@@ -48,17 +47,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const clearDuplicateHighlights = () => {
-        document.querySelectorAll('.duplicate-highlight').forEach(el => {
-            el.classList.remove('duplicate-highlight');
-        });
+    const capitalizeFirstLetter = (string) => {
+        if (!string) return '';
+        return string.charAt(0).toUpperCase() + string.slice(1);
     };
 
     const getElementText = (element) => {
         if (!element || element.classList.contains('break-cell')) return '';
         const clone = element.cloneNode(true);
-        const icons = clone.querySelectorAll('.cell-icon');
-        icons.forEach(icon => icon.remove());
+        clone.querySelectorAll('.cell-icon').forEach(icon => icon.remove());
         const spans = clone.querySelectorAll('span');
         let text = '';
         if (spans.length > 0) {
@@ -69,71 +66,258 @@ document.addEventListener('DOMContentLoaded', () => {
         return text.trim();
     };
 
-    const highlightDuplicates = (searchText) => {
-        clearDuplicateHighlights();
-        const cleanedSearchText = searchText.trim().toLowerCase();
-        if (cleanedSearchText === '' || cleanedSearchText === BREAK_TEXT.toLowerCase()) {
-            return;
+
+    // --- Core Application Logic ---
+
+    const generateScheduleTable = () => {
+        tableHeaderRow.innerHTML = '<th>Godz.</th>';
+        tbody.innerHTML = '';
+
+        for (let i = 0; i < NUMBER_OF_EMPLOYEES; i++) {
+            const th = document.createElement('th');
+            th.textContent = `Pracownik ${i + 1}`;
+            th.classList.add('editable-header');
+            th.setAttribute('data-employee-index', i);
+            th.setAttribute('tabindex', '0');
+            tableHeaderRow.appendChild(th);
         }
-        const allCells = document.querySelectorAll('td.editable-cell');
-        const matchingCells = [];
-        allCells.forEach(cell => {
-            const cellText = getElementText(cell).toLowerCase();
-            if (cellText.includes(cleanedSearchText)) {
-                matchingCells.push(cell);
+
+        for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
+            for (let minute = 0; minute < 60; minute += 30) {
+                if (hour === END_HOUR && minute === 30) continue;
+                const tr = tbody.insertRow();
+                const timeString = `${hour}:${minute.toString().padStart(2, '0')}`;
+                tr.insertCell().textContent = timeString;
+                for (let i = 0; i < NUMBER_OF_EMPLOYEES; i++) {
+                    const cell = tr.insertCell();
+                    cell.classList.add('editable-cell');
+                    cell.setAttribute('data-time', timeString);
+                    cell.setAttribute('data-employee-index', i);
+                    cell.setAttribute('draggable', 'true');
+                    cell.setAttribute('tabindex', '0');
+                }
             }
-        });
-        if (matchingCells.length > 1) {
-            matchingCells.forEach(td => td.classList.add('duplicate-highlight'));
+        }
+    };
+    
+    const applyCellDataToDom = (cell, cellObj) => {
+        cell.className = 'editable-cell';
+        cell.innerHTML = '';
+        delete cell.dataset.isMassage;
+        delete cell.dataset.isPnf;
+
+        if (cellObj.isBreak) {
+            cell.textContent = BREAK_TEXT;
+            cell.classList.add('break-cell');
+            cell.style.backgroundColor = DEFAULT_CELL_COLOR;
+        } else if (cellObj.isSplit) {
+            const createPart = (content, isMassage, isPnf) => {
+                const div = document.createElement('div');
+                div.setAttribute('tabindex', '0');
+                let htmlContent = `<span>${capitalizeFirstLetter(content || '')}</span>`;
+                if (isMassage) {
+                    div.classList.add('massage-text');
+                    div.dataset.isMassage = 'true';
+                }
+                if (isPnf) {
+                    div.classList.add('pnf-text');
+                    div.dataset.isPnf = 'true';
+                }
+                div.innerHTML = htmlContent;
+                return div;
+            };
+            cell.classList.add('split-cell');
+            cell.style.backgroundColor = CONTENT_CELL_COLOR;
+            cell.appendChild(createPart(cellObj.content1, cellObj.isMassage1, cellObj.isPnf1));
+            cell.appendChild(createPart(cellObj.content2, cellObj.isMassage2, cellObj.isPnf2));
+        } else {
+            let htmlContent = `<span>${capitalizeFirstLetter(cellObj.content || '')}</span>`;
+            if (cellObj.isMassage) {
+                cell.classList.add('massage-text');
+                cell.dataset.isMassage = 'true';
+            }
+             if (cellObj.isPnf) {
+                cell.classList.add('pnf-text');
+                cell.dataset.isPnf = 'true';
+            }
+            cell.innerHTML = htmlContent;
+            cell.style.backgroundColor = (getElementText(cell).trim() !== '') ? CONTENT_CELL_COLOR : DEFAULT_CELL_COLOR;
         }
     };
 
-    const searchAndHighlight = (searchTerm) => {
-        const allCells = document.querySelectorAll('th.editable-header, td.editable-cell');
-        const regex = searchTerm ? new RegExp(searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi') : null;
+    const getCurrentTableStateForCell = (cell) => {
+        if (cell.classList.contains('break-cell')) {
+            return { content: BREAK_TEXT, isBreak: true };
+        }
+        if (cell.classList.contains('split-cell')) {
+            const part1 = cell.children[0];
+            const part2 = cell.children[1];
+            return {
+                content1: getElementText(part1), content2: getElementText(part2),
+                isSplit: true,
+                isMassage1: part1?.dataset.isMassage === 'true', isMassage2: part2?.dataset.isMassage === 'true',
+                isPnf1: part1?.dataset.isPnf === 'true', isPnf2: part2?.dataset.isPnf === 'true'
+            };
+        }
+        return {
+            content: getElementText(cell),
+            isMassage: cell.dataset.isMassage === 'true',
+            isPnf: cell.dataset.isPnf === 'true'
+        };
+    };
 
-        const highlightElement = (element) => {
-            // Najpierw usuń stare podświetlenia
-            element.querySelectorAll('span.search-highlight').forEach(highlight => {
-                const parent = highlight.parentNode;
-                while (highlight.firstChild) {
-                    parent.insertBefore(highlight.firstChild, highlight);
-                }
-                parent.removeChild(highlight);
-                parent.normalize(); // Łączy sąsiednie węzły tekstowe
-            });
+    // --- Data Sync with Google Apps Script ---
 
-            if (!regex) return; // Jeśli nie ma czego szukać, kończymy po czyszczeniu
+    const loadSchedule = async () => {
+        try {
+            const response = await fetch(`${WEB_APP_URL}?action=loadSchedule`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const savedData = await response.json();
 
-            // Użyj TreeWalker, aby bezpiecznie znaleźć i zamienić węzły tekstowe
-            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let currentNode;
-            while (currentNode = walker.nextNode()) {
-                textNodes.push(currentNode);
+            if (savedData.status === "error") {
+                 throw new Error(savedData.message);
             }
 
-            textNodes.forEach(node => {
-                const text = node.nodeValue;
-                const newHtml = text.replace(regex, `<span class="search-highlight">$&</span>`);
-                if (newHtml !== text) {
-                    const newFragment = document.createRange().createContextualFragment(newHtml);
-                    node.parentNode.replaceChild(newFragment, node);
+            const dataToApply = savedData || { employeeHeaders: {}, scheduleCells: {} };
+             
+            document.querySelectorAll('th.editable-header').forEach(th => {
+                const index = th.getAttribute('data-employee-index');
+                if (dataToApply.employeeHeaders && dataToApply.employeeHeaders[index]) {
+                    th.textContent = capitalizeFirstLetter(dataToApply.employeeHeaders[index]);
                 }
             });
+
+            document.querySelectorAll('td.editable-cell').forEach(cell => {
+                const time = cell.getAttribute('data-time');
+                const employeeIndex = cell.getAttribute('data-employee-index');
+                const cellData = dataToApply.scheduleCells?.[time]?.[employeeIndex];
+                if (cellData) {
+                    applyCellDataToDom(cell, cellData);
+                } else {
+                    cell.className = 'editable-cell';
+                    cell.innerHTML = '';
+                    cell.style.backgroundColor = DEFAULT_CELL_COLOR;
+                }
+            });
+            refreshAllRowHeights();
+             
+        } catch (error) {
+            console.error('Błąd podczas ładowania danych:', error);
+            window.showToast(`Błąd ładowania: ${error.message}`, 5000);
+        }
+    };
+
+    const saveSchedule = async () => {
+        const scheduleData = {
+            employeeHeaders: {},
+            scheduleCells: {}
         };
 
-        allCells.forEach(cell => {
-            const elementsToHighlight = cell.classList.contains('split-cell') ? cell.querySelectorAll('div') : [cell];
-            elementsToHighlight.forEach(el => highlightElement(el));
+        document.querySelectorAll('th[data-employee-index]').forEach(th => {
+            scheduleData.employeeHeaders[th.dataset.employeeIndex] = th.textContent;
         });
+
+        document.querySelectorAll('td[data-time]').forEach(cell => {
+            const time = cell.dataset.time;
+            const employeeIndex = cell.dataset.employeeIndex;
+            if (!scheduleData.scheduleCells[time]) scheduleData.scheduleCells[time] = {};
+            scheduleData.scheduleCells[time][employeeIndex] = getCurrentTableStateForCell(cell);
+        });
+
+        try {
+            const response = await fetch(`${WEB_APP_URL}?action=saveSchedule`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(scheduleData)
+            });
+
+            if (!response.ok) {
+                 const errorText = await response.text();
+                 throw new Error(`HTTP error! status: ${response.status}, text: ${errorText}`);
+            }
+
+            const result = await response.json();
+
+            if (result.status === "success") {
+                 window.showToast('Zapisano!', 2000);
+            } else {
+                 throw new Error(result.message || 'Nieznany błąd zapisu.');
+            }
+        } catch (error) {
+            console.error('Błąd podczas zapisywania danych:', error);
+            window.showToast(`Błąd zapisu: ${error.message}`, 5000);
+        }
     };
 
-    const capitalizeFirstLetter = (string) => {
-        if (!string) return '';
-        return string.charAt(0).toUpperCase() + string.slice(1);
+    // --- Undo/Redo ---
+
+    const getCurrentTableState = () => {
+        const state = { employeeHeaders: {}, scheduleCells: {} };
+        document.querySelectorAll('th[data-employee-index]').forEach(th => {
+            state.employeeHeaders[th.dataset.employeeIndex] = th.textContent;
+        });
+        document.querySelectorAll('td.editable-cell').forEach(cell => {
+            const time = cell.dataset.time;
+            const employeeIndex = cell.dataset.employeeIndex;
+            if (!state.scheduleCells[time]) state.scheduleCells[time] = {};
+            state.scheduleCells[time][employeeIndex] = getCurrentTableStateForCell(cell);
+        });
+        return state;
     };
 
+    const applyTableState = (state) => {
+        document.querySelectorAll('th.editable-header').forEach(th => {
+            const index = th.dataset.employeeIndex;
+            if (state.employeeHeaders?.[index] !== undefined) {
+                th.textContent = capitalizeFirstLetter(state.employeeHeaders[index]);
+            }
+        });
+        document.querySelectorAll('td.editable-cell').forEach(cell => {
+            const time = cell.dataset.time;
+            const employeeIndex = cell.dataset.employeeIndex;
+            const cellData = state.scheduleCells?.[time]?.[employeeIndex];
+            if (cellData) {
+                applyCellDataToDom(cell, cellData);
+            } else {
+                 cell.className = 'editable-cell';
+                 cell.innerHTML = '';
+                 cell.style.backgroundColor = DEFAULT_CELL_COLOR;
+            }
+        });
+        refreshAllRowHeights();
+        saveSchedule();
+    };
+    
+    const pushStateToUndoStack = () => {
+        const currentState = getCurrentTableState();
+        // Avoid pushing identical states
+        if (undoStack.length > 0 && JSON.stringify(undoStack[undoStack.length - 1]) === JSON.stringify(currentState)) {
+            return;
+        }
+        undoStack.push(currentState);
+        if (undoStack.length > MAX_UNDO_STATES) undoStack.shift();
+        redoStack.length = 0; // Clear redo stack on new action
+        updateUndoRedoButtons();
+    };
+
+    const undoLastAction = () => {
+        if (undoStack.length > 1) { // Need at least one state to revert to
+            const currentState = undoStack.pop();
+            redoStack.push(currentState);
+            const prevState = undoStack[undoStack.length - 1];
+            applyTableState(prevState); // This will also trigger a save
+            updateUndoRedoButtons();
+        }
+    };
+
+    const updateUndoRedoButtons = () => {
+        undoButton.disabled = undoStack.length <= 1;
+    };
+    
+
+    // --- UI Interaction & Event Handlers ---
+    
+    // ... (reszta kodu bez zmian: edycja, menu kontekstowe, drag-drop, nawigacja)
     const setActiveCell = (cell) => {
         if (activeCell) {
             activeCell.classList.remove('active-cell');
@@ -143,7 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeCell.getAttribute('contenteditable') === 'true') {
                 exitEditMode(activeCell);
             }
-            clearDuplicateHighlights();
         }
         
         activeCell = cell;
@@ -154,7 +337,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeCell.parentNode.classList.add('active-cell');
             }
             activeCell.focus();
-            highlightDuplicates(getElementText(activeCell));
         }
     };
 
@@ -205,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sel.removeAllRanges();
         sel.addRange(range);
     };
-
+    
     const exitEditMode = (element) => {
         if (!element || element.getAttribute('contenteditable') !== 'true') return;
 
@@ -214,271 +396,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         element.setAttribute('contenteditable', 'false');
 
+        const parentCell = element.closest('td, th');
+
         // Check if a meaningful change occurred before saving
-        if (originalText !== newText) {
-            // Re-apply state from data to restore icons/styles if needed
-            const parentCell = element.closest('td');
-            parentCell.innerHTML = ''; // Clear it first
-            
-            if (newText.includes('/')) {
-                const parts = newText.split('/', 2);
-                applyCellDataToDom(parentCell, { isSplit: true, content1: parts[0], content2: parts[1] });
+        if (originalText !== newText || parentCell.classList.contains('split-cell')) {
+            let stateToApply;
+            if(parentCell.tagName === 'TH') {
+                 parentCell.textContent = newText;
             } else {
-                 if (parentCell.classList.contains('split-cell')) {
-                    // It was a div inside a split cell
-                    const otherDiv = (element === parentCell.children[0]) ? parentCell.children[1] : parentCell.children[0];
-                    const otherText = getElementText(otherDiv);
-                    if (newText === '' && otherText === '') {
-                        applyCellDataToDom(parentCell, { content: '' }); // Un-split the cell
-                    } else {
+                 if (newText.includes('/') && !parentCell.classList.contains('split-cell')) {
+                    const parts = newText.split('/', 2);
+                    stateToApply = { isSplit: true, content1: parts[0], content2: parts[1] };
+                } else {
+                     if (parentCell.classList.contains('split-cell')) {
+                        const otherDiv = (element === parentCell.children[0]) ? parentCell.children[1] : parentCell.children[0];
+                        const otherText = getElementText(otherDiv);
                         const isFirst = (element === parentCell.children[0]);
-                        applyCellDataToDom(parentCell, { isSplit: true, content1: isFirst ? newText : otherText, content2: isFirst ? otherText : newText });
-                    }
-                 } else {
-                    applyCellDataToDom(parentCell, { content: newText });
-                 }
+                        const c1 = isFirst ? newText : otherText;
+                        const c2 = isFirst ? otherText : newText;
+                        
+                        if (c1 === '' && c2 === '') {
+                             stateToApply = { content: '' }; // Un-split the cell
+                        } else {
+                             stateToApply = { isSplit: true, content1: c1, content2: c2 };
+                        }
+                     } else {
+                        stateToApply = { content: newText };
+                     }
+                }
+                 applyCellDataToDom(parentCell, stateToApply);
             }
 
             saveSchedule();
-            pushStateToUndoStack(); // Save state *after* modification
+            pushStateToUndoStack(); 
         } else {
             // Restore visual state even if no text change
-            const parentCell = element.closest('td');
             const state = getCurrentTableStateForCell(parentCell);
             applyCellDataToDom(parentCell, state);
         }
         
-        highlightDuplicates(getElementText(element));
         refreshRowHeight(element);
     };
 
-    const generateScheduleTable = () => {
-        tableHeaderRow.innerHTML = '<th>Godz.</th>';
-        tbody.innerHTML = '';
-
-        for (let i = 0; i < NUMBER_OF_EMPLOYEES; i++) {
-            const th = document.createElement('th');
-            th.textContent = `Pracownik ${i + 1}`;
-            th.classList.add('editable-header');
-            th.setAttribute('data-employee-index', i);
-            th.setAttribute('tabindex', '0');
-            tableHeaderRow.appendChild(th);
-        }
-
-        for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
-            for (let minute = 0; minute < 60; minute += 30) {
-                if (hour === END_HOUR && minute === 30) continue;
-                const tr = tbody.insertRow();
-                const timeString = `${hour}:${minute.toString().padStart(2, '0')}`;
-                tr.insertCell().textContent = timeString;
-                for (let i = 0; i < NUMBER_OF_EMPLOYEES; i++) {
-                    const cell = tr.insertCell();
-                    cell.classList.add('editable-cell');
-                    cell.setAttribute('data-time', timeString);
-                    cell.setAttribute('data-employee-index', i);
-                    cell.setAttribute('draggable', 'true');
-                    cell.setAttribute('tabindex', '0');
-                }
-            }
-        }
-    };
-
-    const applyCellDataToDom = (cell, cellObj) => {
-        cell.className = 'editable-cell';
-        cell.innerHTML = '';
-        delete cell.dataset.isMassage;
-        delete cell.dataset.isPnf;
-
-        if (cellObj.isBreak) {
-            cell.textContent = BREAK_TEXT;
-            cell.classList.add('break-cell');
-            cell.style.backgroundColor = DEFAULT_CELL_COLOR;
-        } else if (cellObj.isSplit) {
-            const createPart = (content, isMassage, isPnf) => {
-                const div = document.createElement('div');
-                div.setAttribute('tabindex', '0');
-                let htmlContent = `<span>${capitalizeFirstLetter(content || '')}</span>`;
-                if (isMassage) {
-                    div.classList.add('massage-text');
-                    div.dataset.isMassage = 'true';
-                }
-                if (isPnf) {
-                    div.classList.add('pnf-text');
-                    div.dataset.isPnf = 'true';
-                }
-                div.innerHTML = htmlContent;
-                return div;
-            };
-            cell.classList.add('split-cell');
-            cell.style.backgroundColor = CONTENT_CELL_COLOR;
-            cell.appendChild(createPart(cellObj.content1, cellObj.isMassage1, cellObj.isPnf1));
-            cell.appendChild(createPart(cellObj.content2, cellObj.isMassage2, cellObj.isPnf2));
-        } else {
-            let htmlContent = `<span>${capitalizeFirstLetter(cellObj.content || '')}</span>`;
-            if (cellObj.isMassage) {
-                cell.classList.add('massage-text');
-                cell.dataset.isMassage = 'true';
-            }
-             if (cellObj.isPnf) {
-                cell.classList.add('pnf-text');
-                cell.dataset.isPnf = 'true';
-            }
-            cell.innerHTML = htmlContent;
-            cell.style.backgroundColor = (getElementText(cell).trim() !== '') ? CONTENT_CELL_COLOR : DEFAULT_CELL_COLOR;
-        }
-    };
-
-    const loadSchedule = async () => {
-        let savedData = {};
-        try {
-            const response = await fetch(WEB_APP_URL);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            savedData = await response.json();
-            if (Object.keys(savedData).length === 0) savedData = { employeeHeaders: {}, scheduleCells: {} };
-        } catch (error) {
-            console.error('Błąd podczas ładowania danych:', error);
-            window.showToast('Błąd ładowania grafiku', 5000);
-            savedData = { employeeHeaders: {}, scheduleCells: {} };
-        }
-
-        document.querySelectorAll('th.editable-header').forEach(th => {
-            const index = th.getAttribute('data-employee-index');
-            if (savedData.employeeHeaders && savedData.employeeHeaders[index]) {
-                th.textContent = capitalizeFirstLetter(savedData.employeeHeaders[index]);
-            }
-        });
-
-        document.querySelectorAll('td.editable-cell').forEach(cell => {
-            const time = cell.getAttribute('data-time');
-            const employeeIndex = cell.getAttribute('data-employee-index');
-            const cellData = savedData.scheduleCells?.[time]?.[employeeIndex];
-            if (cellData) {
-                applyCellDataToDom(cell, cellData);
-            } else {
-                cell.className = 'editable-cell';
-                cell.innerHTML = '';
-                cell.style.backgroundColor = DEFAULT_CELL_COLOR;
-            }
-        });
-        refreshAllRowHeights();
-    };
-
-    const saveSchedule = async () => {
-        const scheduleData = {
-            employeeHeaders: {},
-            scheduleCells: {}
-        };
-
-        document.querySelectorAll('th[data-employee-index]').forEach(th => {
-            scheduleData.employeeHeaders[th.dataset.employeeIndex] = th.textContent;
-        });
-
-        document.querySelectorAll('td[data-time]').forEach(cell => {
-            const time = cell.dataset.time;
-            const employeeIndex = cell.dataset.employeeIndex;
-            if (!scheduleData.scheduleCells[time]) scheduleData.scheduleCells[time] = {};
-            scheduleData.scheduleCells[time][employeeIndex] = getCurrentTableStateForCell(cell);
-        });
-
-        try {
-            const response = await fetch(WEB_APP_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(scheduleData)
-            });
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            await response.json();
-            window.showToast('Zapisano!', 2000);
-        } catch (error) {
-            console.error('Błąd podczas zapisywania danych:', error);
-            window.showToast('Błąd zapisu!', 5000);
-        }
-    };
-
-    const getCurrentTableStateForCell = (cell) => {
-        if (cell.classList.contains('break-cell')) {
-            return { content: BREAK_TEXT, isBreak: true };
-        }
-        if (cell.classList.contains('split-cell')) {
-            const part1 = cell.children[0];
-            const part2 = cell.children[1];
-            return {
-                content1: getElementText(part1), content2: getElementText(part2),
-                isSplit: true,
-                isMassage1: part1?.dataset.isMassage === 'true', isMassage2: part2?.dataset.isMassage === 'true',
-                isPnf1: part1?.dataset.isPnf === 'true', isPnf2: part2?.dataset.isPnf === 'true'
-            };
-        }
-        return {
-            content: getElementText(cell),
-            isMassage: cell.dataset.isMassage === 'true',
-            isPnf: cell.dataset.isPnf === 'true'
-        };
-    };
-    
-    const getCurrentTableState = () => {
-        const state = { employeeHeaders: {}, scheduleCells: {} };
-        document.querySelectorAll('th[data-employee-index]').forEach(th => {
-            state.employeeHeaders[th.dataset.employeeIndex] = th.textContent;
-        });
-        document.querySelectorAll('td.editable-cell').forEach(cell => {
-            const time = cell.dataset.time;
-            const employeeIndex = cell.dataset.employeeIndex;
-            if (!state.scheduleCells[time]) state.scheduleCells[time] = {};
-            state.scheduleCells[time][employeeIndex] = getCurrentTableStateForCell(cell);
-        });
-        return state;
-    };
-
-    const applyTableState = (state) => {
-        document.querySelectorAll('th.editable-header').forEach(th => {
-            const index = th.dataset.employeeIndex;
-            if (state.employeeHeaders?.[index] !== undefined) {
-                th.textContent = capitalizeFirstLetter(state.employeeHeaders[index]);
-            }
-        });
-        document.querySelectorAll('td.editable-cell').forEach(cell => {
-            const time = cell.dataset.time;
-            const employeeIndex = cell.dataset.employeeIndex;
-            const cellData = state.scheduleCells?.[time]?.[employeeIndex];
-            if (cellData) {
-                applyCellDataToDom(cell, cellData);
-            } else {
-                 cell.className = 'editable-cell';
-                 cell.innerHTML = '';
-                 cell.style.backgroundColor = DEFAULT_CELL_COLOR;
-            }
-        });
-        refreshAllRowHeights();
-        saveSchedule();
-    };
-
-    const pushStateToUndoStack = () => {
-        const currentState = getCurrentTableState();
-        if (undoStack.length > 0 && JSON.stringify(undoStack[undoStack.length - 1]) === JSON.stringify(currentState)) {
-            return;
-        }
-        undoStack.push(currentState);
-        if (undoStack.length > MAX_UNDO_STATES) undoStack.shift();
-        redoStack.length = 0;
-        updateUndoRedoButtons();
-    };
-
-    const undoLastAction = () => {
-        if (undoStack.length > 1) {
-            const currentState = undoStack.pop();
-            redoStack.push(currentState);
-            const prevState = undoStack[undoStack.length - 1];
-            applyTableState(prevState);
-            updateUndoRedoButtons();
-        }
-    };
-
-    const updateUndoRedoButtons = () => {
-        undoButton.disabled = undoStack.length <= 1;
-    };
-    
-    // Event Listeners
     mainTable.addEventListener('click', (event) => {
         const target = event.target.closest('td.editable-cell, th.editable-header, div[tabindex="0"]');
         if (target) {
@@ -495,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = event.target.closest('td.editable-cell, th.editable-header, div[tabindex="0"]');
         if (target) enterEditMode(target);
     });
-
+    
     mainTable.addEventListener('contextmenu', (event) => {
         const target = event.target.closest('td.editable-cell');
         if (target) {
@@ -521,14 +480,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!contextMenu.contains(event.target)) {
             contextMenu.classList.remove('visible');
         }
-        if (!event.target.closest('.active-cell')) {
-             if (activeCell && activeCell.getAttribute('contenteditable') === 'true') {
-                exitEditMode(activeCell);
-            }
-            setActiveCell(null);
+        const activeElement = document.activeElement;
+        const isOutsideTable = !event.target.closest('#mainScheduleTable');
+        
+        if (isOutsideTable && activeCell && activeCell.getAttribute('contenteditable') === 'true') {
+             exitEditMode(activeCell);
+             setActiveCell(null);
+        } else if (isOutsideTable) {
+             setActiveCell(null);
         }
     });
-
+    
     // Context Menu Actions
     contextAddBreak.addEventListener('click', () => {
         if (currentCell) {
@@ -544,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     contextRemoveBreak.addEventListener('click', () => {
         if (currentCell) {
             pushStateToUndoStack();
-            applyCellDataToDom(currentCell, { content: '' }); // Clear the cell
+            applyCellDataToDom(currentCell, { content: '' });
             saveSchedule();
             refreshRowHeight(currentCell);
             window.showToast('Usunięto przerwę');
@@ -555,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     contextClear.addEventListener('click', () => {
         if (currentCell) {
             pushStateToUndoStack();
-            applyCellDataToDom(currentCell, { content: '' }); // Clear the cell
+            applyCellDataToDom(currentCell, { content: '' });
             saveSchedule();
             refreshRowHeight(currentCell);
             window.showToast('Wyczyszczono komórkę');
@@ -571,21 +533,28 @@ document.addEventListener('DOMContentLoaded', () => {
             saveSchedule();
             refreshRowHeight(currentCell);
             window.showToast('Podzielono komórkę');
-            enterEditMode(currentCell.querySelector('div')); // Edit the first part
+            enterEditMode(currentCell.querySelector('div'));
         }
         contextMenu.classList.remove('visible');
     });
 
-    const toggleSpecialStyle = (styleType, dataAttribute) => {
+    const toggleSpecialStyle = (dataAttribute) => {
          if (currentCell) {
             pushStateToUndoStack();
             let state = getCurrentTableStateForCell(currentCell);
             
-            // This is a simplified toggle, assumes toggling the whole cell
-            state[dataAttribute] = !state[dataAttribute];
-            if (state.isSplit) {
-                state[`${dataAttribute}1`] = state[dataAttribute];
-                state[`${dataAttribute}2`] = state[dataAttribute];
+            const targetElement = (activeCell && activeCell.tagName === 'DIV') ? activeCell : currentCell;
+            
+            if (state.isSplit && targetElement.tagName === 'DIV') {
+                 const isFirstPart = targetElement === currentCell.children[0];
+                 const key = `${dataAttribute}${isFirstPart ? '1' : '2'}`;
+                 state[key] = !state[key];
+            } else {
+                state[dataAttribute] = !state[dataAttribute];
+                if(state.isSplit) {
+                     state[`${dataAttribute}1`] = state[dataAttribute];
+                     state[`${dataAttribute}2`] = state[dataAttribute];
+                }
             }
             
             applyCellDataToDom(currentCell, state);
@@ -596,8 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.classList.remove('visible');
     };
 
-    contextMassage.addEventListener('click', () => toggleSpecialStyle('isMassage', 'isMassage'));
-    contextPnf.addEventListener('click', () => toggleSpecialStyle('isPnf', 'isPnf'));
+    contextMassage.addEventListener('click', () => toggleSpecialStyle('isMassage'));
+    contextPnf.addEventListener('click', () => toggleSpecialStyle('isPnf'));
 
     // Drag and Drop
     mainTable.addEventListener('dragstart', (event) => {
@@ -669,7 +638,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (event.key === 'Enter') {
                  event.preventDefault();
                  exitEditMode(target);
-                 // Move to cell below
                  const parentCell = target.closest('td');
                  const nextRow = parentCell.closest('tr').nextElementSibling;
                  if (nextRow) {
@@ -697,7 +665,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let nextElement = null;
         const currentParentTd = activeCell.closest('td, th');
         const currentRow = currentParentTd.closest('tr');
-        const rowCells = Array.from(currentRow.cells).filter(c => c.matches('.editable-cell, .editable-header'));
         const currentIndexInRow = Array.from(currentRow.cells).indexOf(currentParentTd);
 
         switch (event.key) {
@@ -747,6 +714,48 @@ document.addEventListener('DOMContentLoaded', () => {
         searchAndHighlight(searchTerm);
         clearSearchButton.style.display = searchTerm ? 'block' : 'none';
     });
+    
+     const searchAndHighlight = (searchTerm) => {
+        const allCells = document.querySelectorAll('th.editable-header, td.editable-cell');
+        const regex = searchTerm ? new RegExp(searchTerm.replace(/[-\/\^$*+?.()|[\]{}]/g, '\$&'), 'gi') : null;
+
+        const highlightElement = (element) => {
+            // Restore original text
+            const spans = element.querySelectorAll('span.search-highlight');
+            spans.forEach(span => {
+                const parent = span.parentNode;
+                while (span.firstChild) {
+                    parent.insertBefore(span.firstChild, span);
+                }
+                parent.removeChild(span);
+                parent.normalize();
+            });
+
+            if (!regex) return;
+
+            // Highlight new search term
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let currentNode;
+            while(currentNode = walker.nextNode()) {
+                textNodes.push(currentNode);
+            }
+            
+            textNodes.forEach(node => {
+                const text = node.nodeValue;
+                const newHtml = text.replace(regex, `<span class="search-highlight">$&</span>`);
+                if (newHtml !== text) {
+                    const newFragment = document.createRange().createContextualFragment(newHtml);
+                    node.parentNode.replaceChild(newFragment, node);
+                }
+            });
+        };
+
+        allCells.forEach(cell => {
+            const elementsToHighlight = cell.classList.contains('split-cell') ? cell.querySelectorAll('div') : [cell];
+            elementsToHighlight.forEach(el => highlightElement(el));
+        });
+    };
 
     clearSearchButton.addEventListener('click', () => {
         searchInput.value = '';
@@ -755,9 +764,12 @@ document.addEventListener('DOMContentLoaded', () => {
         searchInput.focus();
     });
 
-
     // --- INICJALIZACJA ---
     const init = async () => {
+        if (!WEB_APP_URL) {
+            loadingOverlay.innerHTML = '<div class="toast-message error">Błąd: Brak konfiguracji WEB_APP_URL w schedule.js</div>';
+            return;
+        }
         generateScheduleTable();
         await loadSchedule();
         pushStateToUndoStack(); // Push initial state
