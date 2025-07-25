@@ -5,62 +5,56 @@ const SHEET_NAME = "DATA";
 const EMPLOYEES_SHEET_NAME = "Pracownicy";
 const LEAVES_SHEET_NAME = "Urlopy";
 
-
+// Funkcja GET będzie teraz obsługiwać tylko proste żądania testowe, jeśli zajdzie taka potrzeba.
 function doGet(e) {
-  const action = e.parameter.action;
-  let response;
-
-  try {
-    if (action === "loadSchedule") {
-      response = loadSchedule();
-    } else if (action === "getEmployees") {
-      response = getEmployees();
-    } else {
-      throw new Error("Nieznana akcja GET: " + action);
-    }
-    return ContentService.createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({
-        'Access-Control-Allow-Origin': '*'
-      });
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
-        status: "error",
-        message: error.message
-      }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({
-        'Access-Control-Allow-Origin': '*'
-      });
-  }
+  return ContentService.createTextOutput(JSON.stringify({status: "success", message: "Skrypt działa."}))
+    .setMimeType(ContentService.MimeType.JSON)
+    .withHeaders({'Access-Control-Allow-Origin': '*'});
 }
 
 function doPost(e) {
-  const action = e.parameter.action;
-  let response;
-
+  let action;
+  let data;
+  
   try {
-    const data = JSON.parse(e.postData.contents);
-
-    if (action === "saveSchedule") {
-      response = saveSchedule(data);
-    } else if (action === "addEmployee") {
-      response = addEmployee(data);
-    } else if (action === "deleteEmployee") {
-      response = deleteEmployee(data);
-    } else if (action === "saveLeaves") {
-      response = saveLeaves(data);
+    // Sprawdzamy, czy dane są przesyłane w ciele (body) żądania
+    if (e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+      action = data.action;
     } else {
-      throw new Error("Nieznana akcja POST: " + action);
+      // Jeśli nie, sprawdzamy parametry URL (dla prostszych akcji)
+      action = e.parameter.action;
     }
 
+    let response;
+    
+    switch (action) {
+      case "loadSchedule":
+        response = loadSchedule();
+        break;
+      case "getEmployees":
+        response = getEmployees();
+        break;
+      case "saveSchedule":
+        response = saveSchedule(data.payload);
+        break;
+      case "addEmployee":
+        response = addEmployee(data.payload);
+        break;
+      case "deleteEmployee":
+        response = deleteEmployee(data.payload);
+        break;
+      case "saveLeaves":
+        response = saveLeaves(data.payload);
+        break;
+      default:
+        throw new Error("Nieznana akcja POST: " + action);
+    }
+    
     return ContentService.createTextOutput(JSON.stringify(response))
       .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
+      .withHeaders({'Access-Control-Allow-Origin': '*'});
+      
   } catch (error) {
      return ContentService.createTextOutput(JSON.stringify({
         status: "error",
@@ -68,11 +62,7 @@ function doPost(e) {
         details: error.stack
       }))
       .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
+      .withHeaders({'Access-Control-Allow-Origin': '*'});
   }
 }
 
@@ -86,15 +76,7 @@ function doOptions(e) {
         });
 }
 
-
 function loadSchedule() {
-  const cache = CacheService.getScriptCache();
-  const CACHE_KEY = "scheduleData";
-  let cached = cache.get(CACHE_KEY);
-  if (cached != null) {
-    return JSON.parse(cached);
-  }
-
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
   const dataRange = sheet.getDataRange();
   const values = dataRange.getValues();
@@ -106,15 +88,14 @@ function loadSchedule() {
       break;
     }
   }
-  cache.put(CACHE_KEY, scheduleData, 3600);
   return JSON.parse(scheduleData);
 }
 
-function saveSchedule(data) {
+function saveSchedule(payload) {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
   const dataRange = sheet.getDataRange();
   const values = dataRange.getValues();
-  const jsonData = JSON.stringify(data);
+  const jsonData = JSON.stringify(payload);
 
   let keyFound = false;
   for (let i = 1; i < values.length; i++) {
@@ -128,40 +109,30 @@ function saveSchedule(data) {
   if (!keyFound) {
     sheet.appendRow([DATA_KEY, jsonData]);
   }
+  
+  CacheService.getScriptCache().remove("scheduleData");
 
-  const cache = CacheService.getScriptCache();
-  cache.put("scheduleData", jsonData, 3600); // Aktualizacja cache
-
-  return {
-    status: "success",
-    message: "Harmonogram zapisany pomyślnie."
-  };
+  return { status: "success", message: "Harmonogram zapisany pomyślnie." };
 }
-
 
 function getEmployees() {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(EMPLOYEES_SHEET_NAME);
   if (!sheet) return [];
   const data = sheet.getDataRange().getValues();
-  // Pomijamy nagłówek, zwracamy tylko imiona i nazwiska
   return data.slice(1).map(row => row[0]);
 }
 
-function addEmployee(employeeData) {
-    const { name } = employeeData;
-    if (!name) {
-        throw new Error("Nazwa pracownika jest wymagana.");
-    }
+function addEmployee(payload) {
+    const { name } = payload;
+    if (!name) throw new Error("Nazwa pracownika jest wymagana.");
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(EMPLOYEES_SHEET_NAME);
     sheet.appendRow([name]);
     return { status: "success", message: "Pracownik dodany pomyślnie." };
 }
 
-function deleteEmployee(employeeData) {
-    const { name } = employeeData;
-    if (!name) {
-        throw new Error("Nazwa pracownika jest wymagana do usunięcia.");
-    }
+function deleteEmployee(payload) {
+    const { name } = payload;
+    if (!name) throw new Error("Nazwa pracownika jest wymagana do usunięcia.");
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(EMPLOYEES_SHEET_NAME);
     const data = sheet.getDataRange().getValues();
     for (let i = data.length - 1; i >= 0; i--) {
@@ -173,18 +144,15 @@ function deleteEmployee(employeeData) {
     throw new Error("Nie znaleziono pracownika o podanej nazwie.");
 }
 
-function saveLeaves(leavesData) {
+function saveLeaves(payload) {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LEAVES_SHEET_NAME);
-  sheet.clear(); // Czyścimy arkusz przed zapisem nowych danych
+  sheet.clear(); 
   const headers = ["Pracownik", "Dni Urlopu"];
   const dataToWrite = [headers];
-  for (const employee in leavesData) {
-    dataToWrite.push([employee, leavesData[employee]]);
+  for (const employee in payload) {
+    dataToWrite.push([employee, payload[employee]]);
   }
   sheet.getRange(1, 1, dataToWrite.length, headers.length).setValues(dataToWrite);
 
-  return {
-    status: "success",
-    message: "Dane urlopowe zapisane pomyślnie."
-  };
+  return { status: "success", message: "Dane urlopowe zapisane pomyślnie." };
 }
