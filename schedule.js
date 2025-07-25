@@ -1,7 +1,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     // WAŻNE: Wklej tutaj nowy URL wdrożonej aplikacji Google Apps Script
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzBasq2OkwvizSnlu6mtrnr4x39kbGY8aFhzyjuuURrq8JjmTZ_GTOogSWfE55a5RLILw/exec';
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyfUBRJKbn7E9Z9vaX9NoZQQdLhqn8xra3UNvRMM5e4m93VrOahx1bH_6-rfphxen_8pg/exec';
 
     const loadingOverlay = document.getElementById('loadingOverlay');
     const mainTable = document.getElementById('mainScheduleTable');
