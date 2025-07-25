@@ -1,7 +1,7 @@
 
 const SPREADSHEET_ID = "1O07Bv15T_r5sL20D1LhLgM3fO2zQ8gE0Q9g8f7h6g5Y";
-const DATA_KEY = "scheduleData";
-const SHEET_NAME = "Dane";
+const DATA_KEY = "grafikKalinowaData";
+const SHEET_NAME = "DATA";
 const EMPLOYEES_SHEET_NAME = "Pracownicy";
 const LEAVES_SHEET_NAME = "Urlopy";
 
@@ -188,4 +188,3 @@ function saveLeaves(leavesData) {
     message: "Dane urlopowe zapisane pomyślnie."
   };
 }
-
